@@ -1,0 +1,70 @@
+# Dependency directories
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.pnpm-debug.log
+
+# Build outputs
+dist/
+build/
+lib/
+*.tsbuildinfo
+
+# Environment and config
+.env
+.env.local
+.env.*.local
+config.local.js
+config.local.ts
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Coverage and test outputs
+coverage/
+.nyc_output/
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+.tmp/
+temp/
+
+# Cache directories
+.cache/
+.npm/
+.eslintcache
+
+# Yarn specific
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# Old config files (if migrated)
+.eslintrc.cjs
+.eslintrc.js
+.eslintrc.json
+
+# OS specific files
+Thumbs.db
+
+# Optional: API documentation file (if it contains sensitive info)
+# api_doc.txt
+
+# api doc path/url
+api_doc.txt
+
+# Lockfile: project uses npm only
+yarn.lock
