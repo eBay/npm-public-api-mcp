@@ -4,6 +4,7 @@
 import { type OpenAPIV3 } from "openapi-types";
 import AjvLib from "ajv";
 import { SUPPORTED_CALLING_METHODS, USER_ENVIRONMENT } from "../constant/constants.js";
+import { logger } from "../helper/logger.js";
 const Ajv = AjvLib.default || AjvLib;
 
 /**
@@ -68,7 +69,7 @@ export function validatePath(openApiDoc: OpenAPIV3.Document, inputUrl: string): 
   // Extract the path from the URL (remove base URL part)
   const apiPath : string = parseApiPathFromUrl(inputUrl);
   if (!apiPath) {
-    console.error(`input url ${inputUrl} is not valid, please check it.`);
+    logger.error(`input url ${inputUrl} is not valid, please check it.`);
     return {pathValidateRes : false, apiPath:"", specPath: "", specPathItem: undefined};
   }
   // bathPath validation
@@ -83,7 +84,7 @@ export function validatePath(openApiDoc: OpenAPIV3.Document, inputUrl: string): 
   }
   const basePathRegex = new RegExp(`${basePath.replace(/\{[^}]+\}/g, "[^/]+")  }$`);
   if (basePath && !basePathRegex.test(apiPath)) {
-    console.error(`API path ${apiPath} does not match the base path ${basePath} in OpenAPI specification.`);
+    logger.error(`API path ${apiPath} does not match the base path ${basePath} in OpenAPI specification.`);
     return {pathValidateRes : false, apiPath, specPath: "", specPathItem: undefined};
   }
 
@@ -112,7 +113,7 @@ export function parseApiPathFromUrl(inputUrl: string): string {
     if (pathMatch) {
       return pathMatch[1];
     }
-    console.error(`Failed to parse API path from URL: ${inputUrl}`);
+    logger.error(`Failed to parse API path from URL: ${inputUrl}`);
     return  "";
   }
 }

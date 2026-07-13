@@ -9,7 +9,8 @@ import axios from "axios";
 import * as yaml from "js-yaml";
 import util from "util";
 import { z, type ZodTypeAny } from "zod";
-import { buildHeadersFromInput } from "../helper/http-helper.js";
+import { buildHeadersFromInput, makeRequestWithTokenRefresh } from "../helper/http-helper.js";
+import { logger } from "../helper/logger.js";
 
 
 
@@ -28,14 +29,14 @@ export async function getOpenApiDocumentsFromConfigFile(): Promise<OpenAPIV3.Doc
       .map(line => line.trim())
       .filter(line => line.length > 0 && !line.startsWith("#"));
   }
-  console.error("Loading OpenAPI specifications from:", urls);
+  logger.info(`Loading OpenAPI specifications from: ${urls.join(", ")}`);
   // parse opebapi doc from url/path
   for (const specPath of urls) {
     try {
       const doc = await SwaggerParser.dereference(specPath) as OpenAPIV3.Document;
       docs.push(doc);
     } catch (e) {
-      console.error(`getOpenApiDocumentsFromConfigFile#[Failed to load OpenAPI doc from the specPath : ${specPath}]`);
+      logger.error(`getOpenApiDocumentsFromConfigFile#[Failed to load OpenAPI doc from the specPath : ${specPath}]`);
     }
   }
   return docs;
@@ -63,11 +64,12 @@ export function readSchema2Map(obj: unknown): unknown {
  */
 export async function queryAndParseOpenApiDoc(specTitle: string, operationId : string, specUrl: string): Promise<OpenAPIV3.Document> {
   const url = util.format(specUrl, specTitle, operationId);
-  const apiSpecRes = await axios.get<string>(url,  {
-    headers: buildHeadersFromInput(undefined, false),
-    httpsAgent: new (await import("https")).Agent({
-      rejectUnauthorized: false,
-    })});
+  const headers = await buildHeadersFromInput(undefined, false);
+  const apiSpecRes = await makeRequestWithTokenRefresh({
+    method: 'GET',
+    url,
+    headers,
+  });
   const docString = apiSpecRes.data;
   try {
     // Try parsing as JSON first
@@ -79,7 +81,7 @@ export async function queryAndParseOpenApiDoc(specTitle: string, operationId : s
     } catch (yamlError) {
       const _jsonMsg = jsonError instanceof Error ? jsonError.message : String(jsonError);
       const _yamlMsg = yamlError instanceof Error ? yamlError.message : String(yamlError);
-      console.error("failed to parse OpenAPI document !!!");
+      logger.error("failed to parse OpenAPI document !!!");
       return {} as OpenAPIV3.Document;
     }
   }

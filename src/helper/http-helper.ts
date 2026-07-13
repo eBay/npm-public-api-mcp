@@ -1,11 +1,12 @@
 /**
  * Helper functions for HTTP requests
  */
-import axios from "axios";
+import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
 import { type OpenAPIV3 } from "openapi-types";
 import https from "https";
 import { ApiEnvironment, DOMAIN_NAME, USER_ENVIRONMENT } from "../constant/constants.js";
-const USER_TOKEN = process.env.EBAY_CLIENT_TOKEN || "";
+import { getAccessToken, handle401Error } from "./token-manager.js";
+import {logger} from "./logger.js";
 const SCHEMA_REQUEST_BODY = "requestBody";
 
 
@@ -26,7 +27,7 @@ export function formatAxiosError(error: unknown): string {
  * needSetHostByEnv indicates whether to set the Host header based on the environment : If false, it uses the default production domain
  * Build headers from input headers and fill with default headers
  */
-export function buildHeadersFromInput(inputHeaders: Record<string, string[]> | undefined, needSetHostByEnv : boolean): Record<string, string> {
+export async function buildHeadersFromInput(inputHeaders: Record<string, string[]> | undefined, needSetHostByEnv : boolean): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
   if (inputHeaders) {
     for (const [key, value] of Object.entries(inputHeaders)) {
@@ -34,14 +35,15 @@ export function buildHeadersFromInput(inputHeaders: Record<string, string[]> | u
     }
   }
   // Add default headers
-  fillDefaultHeaderInfo(headers, needSetHostByEnv);
+  await fillDefaultHeaderInfo(headers, needSetHostByEnv);
   return headers;
 }
 
-export function fillDefaultHeaderInfo(headers: Record<string, string>, needSetHostByEnv : boolean): void {
+export async function fillDefaultHeaderInfo(headers: Record<string, string>, needSetHostByEnv : boolean): Promise<void> {
   headers["Host"] = needSetHostByEnv ? DOMAIN_NAME[USER_ENVIRONMENT] : DOMAIN_NAME[ApiEnvironment.PRODUCTION] ;
   headers["User-Agent"] = "EBAY-API-MCP-Tool/1.0";
-  headers["Authorization"] = `Bearer ${USER_TOKEN}`;
+  const token = await getAccessToken();
+  headers["Authorization"] = `Bearer ${token}`;
   headers["Content-Type"] = headers["Content-Type"] || "application/json";
 }
 
@@ -116,11 +118,11 @@ export function resolvePath(pathPattern: string, pathVariables?: Record<string, 
 /**
  * Prepare request data
  */
-export function prepareRequestData(
+export async function prepareRequestData(
   input: Record<string, unknown>,
   operation: OpenAPIV3.OperationObject,
   path: string,
-): { resolvedPath: string; headers: Record<string, string>; params: Record<string, unknown>; data: unknown; } {
+): Promise<{ resolvedPath: string; headers: Record<string, string>; params: Record<string, unknown>; data: unknown; }> {
   let resolvedPath = path;
   const headers: Record<string, string> = {};
   const params: Record<string, unknown> = {};
@@ -145,9 +147,49 @@ export function prepareRequestData(
       }
     }
   });
-  fillDefaultHeaderInfo(headers, false);
+  await fillDefaultHeaderInfo(headers, false);
   if (Object.keys(pathParams).length > 0) {
     resolvedPath = resolvePath(resolvedPath, pathParams);
   }
   return { resolvedPath, headers, params, data };
+}
+
+/**
+ * Make an HTTP request with automatic token refresh on 401 errors
+ * @param config - Axios request configuration
+ * @param retryOn401 - Whether to retry on 401 error (default: true)
+ * @returns Promise<AxiosResponse>
+ */
+export async function makeRequestWithTokenRefresh(
+  config: AxiosRequestConfig,
+  retryOn401: boolean = true
+): Promise<AxiosResponse> {
+  try {
+    return await axios.request(config);
+  } catch (error) {
+    // Check if it's a 401 error and we should retry
+    if (axios.isAxiosError(error) && error.response?.status === 401 && retryOn401) {
+      logger.error("Received 401 Unauthorized, attempting to refresh token and retry...");
+
+      try {
+        // Refresh the token
+        const newToken = await handle401Error();
+
+        // Update the Authorization header with the new token
+        if (!config.headers) {
+          config.headers = {};
+        }
+        config.headers['Authorization'] = `Bearer ${newToken}`;
+
+        // Retry the request with the new token (but don't retry again if it fails)
+        return await axios.request(config);
+      } catch (refreshError) {
+        logger.error("Failed to refresh token or retry request:", refreshError);
+        throw refreshError;
+      }
+    }
+
+    // If not a 401 or retry is disabled, re-throw the original error
+    throw error;
+  }
 }

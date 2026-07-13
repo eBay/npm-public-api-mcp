@@ -11,33 +11,24 @@ import util from "util";
 import { RECALL_SPEC_BY_PROMPT_URL, RECALL_SPEC_WITH_FIELD_URL, SUPPORTED_CALLING_METHODS, USER_ENVIRONMENT } from "../constant/constants.js";
 import { getOpenApiDocumentsFromConfigFile, queryAndParseOpenApiDoc, buildOperationSchema, buildZodSchema } from "../helper/openapi-helper.js";
 import { validateRequestParameters as validateRequestParametersFromHelper } from "../helper/validation-helper.js";
-import { buildHeadersFromInput, buildFinalUrl, replaceDomainNameByEnvironment, formatAxiosError, buildBaseUrlFromOpenApi, prepareRequestData } from "../helper/http-helper.js";
+import { buildHeadersFromInput, buildFinalUrl, replaceDomainNameByEnvironment, formatAxiosError, buildBaseUrlFromOpenApi, prepareRequestData, makeRequestWithTokenRefresh } from "../helper/http-helper.js";
 
-const QUERY_API_TOOL_DISCRIPTION = `eBay Public API Search Tool
+const QUERY_API_TOOL_DESCRIPTION = `eBay OpenAPI/REST API Search Tool
 
-Purpose: Searches eBay's public APIs to find relevant endpoints, documentation, and implementation details for eBay marketplace integration.
+Searches eBay REST/OpenAPI APIs for endpoints, docs, parameters, schemas, and auth requirements.
 
-When to use:
-- When you need to find specific eBay API endpoints or methods
-- When looking for API documentation, parameters, or response formats
-- When researching eBay integration capabilities and limitations
-- When comparing different eBay API options for a use case
+Use for REST/OpenAPI requests or when you need details about an eBay REST endpoint.
 
-Capabilities: This tool searches across eBay's public API ecosystem including:
-- Selling APIs: Create/manage listings, inventory management, order fulfillment, shipping
-- Buying APIs: Product discovery, shopping cart, checkout processes, bidding functionality
-- Search APIs: Marketplace search, filtering, categorization, product lookup
-- Affiliate APIs: Referral tracking, commission tools, traffic attribution
-- Customer Service APIs: Feedback systems, messaging, dispute resolution
-- Marketing APIs: Promoted listings, coupon creation, promotional campaigns
+Routing:
+- Use this tool for REST/OpenAPI requests.
 
-Input required: 
-- Search query describing the desired API functionality or endpoint
+Input:
+- Natural-language query.
 
-Output format:
-- List of OpenAPI specifications for related eBay APIs
-- Each spec includes endpoint definitions, request/response schemas, and authentication requirements`;
-const INVOKE_API_TOOL_DISCRIPTION = `eBay Public API Invocation Tool
+Returns:
+- Relevant eBay REST/OpenAPI specs and endpoint details.`;
+
+const INVOKE_API_TOOL_DESCRIPTION = `eBay Public API Invocation Tool
 
 Purpose: Executes actual calls to eBay's public APIs using known OpenAPI specifications to retrieve real data and fulfill user requests.
 
@@ -128,23 +119,24 @@ function registerOperation(
 ): void {
   const properties = buildOperationSchema(operation);
   const zodProperties = buildZodSchema(properties);
-  server.tool(
+  const inputSchema = zodProperties;
+
+  server.registerTool(
     operation.operationId || "unknownOperation",
-    operation.description || "No description",
-    zodProperties,
-    async (input:Record<string, unknown>, _extra) => {
+    {
+      description: operation.description || "No description",
+      inputSchema: inputSchema as any
+    },
+    async (input: any, _extra: any) => {
       try {
-        const { resolvedPath, headers, params, data } = prepareRequestData(input, operation, path);
+        const { resolvedPath, headers, params, data } = await prepareRequestData(input, operation, path);
         const url = baseUrl + resolvedPath;
-        const resp = await axios.request({
+        const resp = await makeRequestWithTokenRefresh({
           url,
           method,
           headers,
           params,
-          data,
-          httpsAgent: new (await import("https")).Agent({
-            rejectUnauthorized: false,
-          })
+          data
         });
         return {
           content: [
@@ -182,18 +174,22 @@ function registerQueryApiTool(server: McpServer): void {
   const hasCustomDoc = process.env.EBAY_API_DOC_URL_FILE;
   if (hasCustomDoc) {return;}
 
-  server.tool(
+  const inputSchema = { prompt: z.string() };
+
+  server.registerTool(
     "query_ebay_api",
-    QUERY_API_TOOL_DISCRIPTION,
-    { prompt: z.string() },
-    async (input) => {
+    {
+      description: QUERY_API_TOOL_DESCRIPTION,
+      inputSchema: inputSchema as any
+    },
+    async (input: any) => {
       try {
         const url = util.format(RECALL_SPEC_BY_PROMPT_URL, encodeURIComponent(input.prompt));
-        const resp = await axios.get(url, {
-          headers: buildHeadersFromInput(undefined, false),
-          httpsAgent: new (await import("https")).Agent({
-            rejectUnauthorized: false,
-          }),
+        const headers = await buildHeadersFromInput(undefined, false);
+        const resp = await makeRequestWithTokenRefresh({
+          url,
+          method: 'GET',
+          headers
         });
         return {
           content: [
@@ -203,7 +199,7 @@ function registerQueryApiTool(server: McpServer): void {
       } catch (error) {
         return {
           content: [
-            { type: "text", text: `Error: ${error instanceof Error ? error.message : String(error)}` },
+            { type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` },
           ],
           isError: true,
         };
@@ -216,14 +212,18 @@ function registerQueryApiTool(server: McpServer): void {
  * Register a tool for executing API calls with proper validation and error handling
  */
 function registerInvokeApiTool(server: McpServer): void {
-  server.tool(
+  const inputSchema = getInvokeApiSchema();
+
+  server.registerTool(
     "call_ebay_api",
-    INVOKE_API_TOOL_DISCRIPTION,
-    getInvokeApiSchema(),
-    async (input, _extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
+    {
+      description: INVOKE_API_TOOL_DESCRIPTION,
+      inputSchema: inputSchema as any
+    },
+    async (input: any, _extra: any) => {
       try {
         // Build headers
-        const headers = buildHeadersFromInput(input.headers, true);
+        const headers = await buildHeadersFromInput(input.headers, true);
         // query and parse apiSpec by specTitle and operationId
         const openApiDoc = await queryAndParseOpenApiDoc(input.specTitle, input.operationId, RECALL_SPEC_WITH_FIELD_URL);
         const replacedDomainUrl = replaceDomainNameByEnvironment(input.url);
@@ -245,16 +245,13 @@ function registerInvokeApiTool(server: McpServer): void {
           };
         }
 
-        // Make the API request
-        const resp = await axios.request({
+        // Make the API request with automatic token refresh on 401
+        const resp = await makeRequestWithTokenRefresh({
           url : buildFinalUrl(replacedDomainUrl, input.urlVariables),
           method: input.method,
           headers,
           params: input.urlQueryParams,
-          data : input.requestBody,
-          httpsAgent: new (await import("https")).Agent({
-            rejectUnauthorized: false,
-          }),
+          data : input.requestBody
         });
 
         return {
@@ -296,24 +293,28 @@ function getInvokeApiSchema(): Record<string, ZodTypeAny> {
  * Register MCP prompts to guide LLM in using eBay API tools effectively
  */
 function registerPrompts(server: McpServer): void {
-  server.prompt(
+  const argsSchema = {
+    user_input: z.string().describe("The user's original request"),
+  };
+
+  server.registerPrompt(
     "interpret_user_request",
-    "Convert abstract user requests into specific eBay API tool calls",
     {
-      user_input: z.string().describe("The user's original request"),
+      description: "Convert abstract user requests into specific eBay API tool calls",
+      argsSchema: argsSchema as any
     },
-    async (args, _extra) => {
+    async (args: any) => {
       const { user_input } = args;
-      
+
       // analyze the user input to determine intent and suggest API calls
       const suggestions = analyzeUserIntent(user_input);
-      
+
       return {
         messages: [
           {
-            role: "assistant",
+            role: "assistant" as const,
             content: {
-              type: "text",
+              type: "text" as const,
               text: suggestions
             }
           }

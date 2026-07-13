@@ -9,7 +9,7 @@ export default [
   
   // Global ignores
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', '*.config.js', '*.config.ts', 'vitest.setup.ts'],
+    ignores: ['dist/**', 'node_modules/**', '*.config.js', '*.config.ts'],
   },
   
   // TypeScript configuration
@@ -24,7 +24,7 @@ export default [
         ...globals.es2022,
       },
       parserOptions: {
-        project: ['./tsconfig.json', './tsconfig.node.json'],
+        project: './tsconfig.json',
       },
     },
     plugins: {
@@ -45,14 +45,6 @@ export default [
       'semi': ['error', 'always'],
       'quotes': ['warn', 'double'],
       'no-console': 'off', // Since console.error is used for logging
-    },
-  },
-  
-  // Test files configuration
-  {
-    files: ['**/*.test.ts', '**/*.spec.ts'],
-    rules: {
-      'no-console': 'off',
     },
   },
 ]; 

@@ -1,8 +1,6 @@
 # Dependency directories
 node_modules/
 npm-debug.log
-yarn-debug.log
-yarn-error.log
 .pnpm-debug.log
 
 # Build outputs
@@ -25,6 +23,9 @@ config.local.ts
 *.swo
 .DS_Store
 
+# NPM configuration (may contain local settings)
+.npmrc
+
 # Coverage and test outputs
 coverage/
 .nyc_output/
@@ -43,16 +44,13 @@ temp/
 .npm/
 .eslintcache
 
-# Yarn specific
+# Package manager files
 .yarn/*
-!.yarn/patches
-!.yarn/releases
-!.yarn/plugins
-!.yarn/sdks
-!.yarn/versions
+yarn.lock
+.yarnrc.yml
 .pnp.*
 
-# Old config files (if migrated)
+# Old/deprecated config files
 .eslintrc.cjs
 .eslintrc.js
 .eslintrc.json
@@ -65,6 +63,3 @@ Thumbs.db
 
 # api doc path/url
 api_doc.txt
-
-# Lockfile: project uses npm only
-yarn.lock
