@@ -1,20 +1,18 @@
-import { defineConfig } from "vitest/config";
-import { resolve } from "path";
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    environment: "node",
-    include: ["src/**/*.test.ts"],
     globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-    alias: {
-      // This mimics the moduleNameMapper in your Jest config
-      "~/(.*)": resolve(__dirname, "src/$1"),
-    },
+    environment: 'node',
     coverage: {
-      provider: "v8",
-      reporter: ["text", "json", "html"],
-      exclude: ["**/node_modules/**", "**/dist/**", "**/src/test/**"],
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'dist/',
+        '**/*.config.*',
+        '**/types.ts',
+      ],
     },
   },
 });

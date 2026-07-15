@@ -33,11 +33,6 @@ export const RECALL_SPEC_BY_PROMPT_URL = "https://api.ebay.com/developer/mcp/v1/
 export const RECALL_SPEC_WITH_FIELD_URL = "https://api.ebay.com/developer/mcp/v1/search/%s?operationId=%s";
 
 /**
- * Required environment variable names for the application
- */
-export const REQUIRED_ENV_VARS = ["EBAY_CLIENT_TOKEN"];
-
-/**
  * API domain name, differentiated by api environment
  */
 export const DOMAIN_NAME = {
@@ -51,4 +46,12 @@ export const DOMAIN_NAME = {
 export const SUPPORTED_CALLING_METHODS = {
   [ApiEnvironment.SANDBOX]: ["get", "put", "post", "delete", "options", "head", "patch", "trace"],
   [ApiEnvironment.PRODUCTION]: ["get"],
+};
+
+/**
+ * eBay OAuth token endpoints by environment
+ */
+export const TOKEN_ENDPOINTS = {
+  [ApiEnvironment.SANDBOX]: "https://api.sandbox.ebay.com/identity/v1/oauth2/token",
+  [ApiEnvironment.PRODUCTION]: "https://api.ebay.com/identity/v1/oauth2/token",
 };
