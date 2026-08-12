@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - main
+permissions:
+  id-token: write 
+  contents: read
 
 jobs:
   publish-npm:
