@@ -26,6 +26,10 @@
   ],
   "author": "eBay Inc.",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eBay/npm-public-api-mcp"
+  },
   "dependencies": {
     "@apidevtools/swagger-parser": "^10.1.1",
     "@modelcontextprotocol/sdk": "1.26.0",
