@@ -48,6 +48,36 @@ export const SUPPORTED_CALLING_METHODS = {
   [ApiEnvironment.PRODUCTION]: ["get"],
 };
 
+// ==================== GraphQL Configuration ====================
+
+/**
+ * GraphQL endpoint URLs by environment
+ */
+export const GRAPHQL_ENDPOINTS = {
+  [ApiEnvironment.PRODUCTION]: "https://graphqlapi.ebay.com/graphql",
+  [ApiEnvironment.SANDBOX]: "https://graphqlapi.sandbox.ebay.com/graphql",
+};
+
+/**
+ * GraphQL schema search API endpoint
+ */
+export const GRAPHQL_SEARCH_URL = "https://api.ebay.com/developer/mcp/v1/gqlmcp/search";
+
+/**
+ * GraphQL query validation API endpoint
+ */
+export const GRAPHQL_VALIDATION_URL = "https://api.ebay.com/developer/mcp/v1/gqlmcp/validate";
+
+/**
+ * Supported GraphQL operations by environment
+ * Production: Only Query allowed
+ * Sandbox: Both Query and Mutation allowed
+ */
+export const SUPPORTED_GRAPHQL_OPERATIONS = {
+  [ApiEnvironment.PRODUCTION]: ["query"],
+  [ApiEnvironment.SANDBOX]: ["query", "mutation"],
+};
+
 /**
  * eBay OAuth token endpoints by environment
  */

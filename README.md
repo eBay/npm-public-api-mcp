@@ -4,11 +4,11 @@ Seamlessly integrate eBay's APIs into your AI assistant workflow. This MCP serve
 
 ## Features
 
-- 🔍 **REST API Access** – Search, browse, and call eBay REST APIs (via OpenAPI specs) using plain language
+- 🔍 **REST & GraphQL API Access** – Search, browse, and call both REST APIs (via OpenAPI specs) and GraphQL APIs (via schema discovery) using plain language
 - 💬 **Natural language interface** – Just describe what you want; no need to memorize endpoints
 - 🔑 **Simplified setup with automatic token management** – Just provide Client ID and Client Secret; the server handles OAuth token generation and refresh every ~2 hours
 - 🗝️ **Dual token mode** – Application tokens for public data, User tokens for private data
-- ⚡ **MCP Prompt support** – Enhanced AI assistant integration for REST APIs
+- ⚡ **MCP Prompt support** – Enhanced AI assistant integration for both REST and GraphQL APIs
 
 ## Prerequisites
 
@@ -24,7 +24,7 @@ This release does not officially support the eBay sandbox environment. While the
 **Production Environment Restrictions**
 
 - **REST APIs**: Only GET requests are supported (read operations only)
-- **Write operations**: POST, PUT, DELETE are not available in production
+- **GraphQL API**: Only Query operations are supported (no Mutation operations)
 
 This MCP server is designed for safe, read-only access to production eBay data. Sandbox support and write operations may be added in future releases.
 
@@ -178,9 +178,9 @@ Restart your MCP client to load the server.
 
 ## Tools and Prompts
 
-This server exposes two primary tools and one MCP prompt to your AI assistant.
+This server exposes four primary tools and two MCP prompts to your AI assistant.
 
-### `query_ebay_api` — API Discovery
+### `query_ebay_api` — REST API Discovery
 
 Searches eBay's OpenAPI specifications using a natural language prompt. Use this to explore available APIs, look up endpoint parameters, or find the right API for a task.
 
@@ -190,7 +190,7 @@ What parameters does the Browse API's getItem endpoint require?
 Which API should I use to search for items by keyword?
 ```
 
-### `call_ebay_api` — API Invocation
+### `call_ebay_api` — REST API Invocation
 
 Executes actual calls to eBay's APIs and returns live marketplace data. Typically used after `query_ebay_api` has identified the right endpoint.
 
@@ -200,39 +200,71 @@ Get details for eBay item ID 123456789
 Show me eBay's taxonomy categories for electronics
 ```
 
+### `query_ebay_graphql` — GraphQL Schema Discovery
+
+Searches eBay's GraphQL schema using a natural language prompt. Use this to explore available queries, mutations, types, and fields, or find the right operation for a task.
+
+```
+What fields are available on the Order type?
+Which query should I use to get item details by ID?
+What mutations are available for managing listings?
+```
+
+### `call_ebay_graphql` — GraphQL Query Execution
+
+Executes actual GraphQL queries against eBay's API and returns live marketplace data. Typically used after `query_ebay_graphql` has identified the right operation and its required fields.
+
+```
+Get the title, price, and seller info for listing ID 123456789
+Search for iPhone 15 items and return the top 5 with prices
+Fetch my active orders and their current status
+```
+
 You can ask in natural language — the AI selects and sequences the tools automatically.
 
-## MCP Prompt
+## MCP Prompts
 
-This server also registers one MCP prompt to help the client turn broad user requests into the right tool calls.
+This server registers two MCP prompts to help the client turn broad user requests into the right tool calls — one for REST APIs and one for GraphQL.
 
-### `interpret_user_request` — Request Interpretation
+### `interpret_user_request` — REST API Request Interpretation
 
 Accepts the user's original request as `user_input` and returns guidance that helps the MCP client decide when to use `query_ebay_api`, when to use `call_ebay_api`, and how to phrase discovery queries.
 
 Typical use cases:
 
-- Convert abstract requests into concrete eBay API actions
+- Convert abstract requests into concrete eBay REST API actions
 - Decide whether to search API specifications first or invoke a known endpoint directly
 - Improve the natural-language prompt sent to `query_ebay_api`
 
-Conceptually, the prompt tells the client to:
+### `interpret_graphql_request` — GraphQL Request Interpretation
 
-- inspect the user's request
-- choose between `query_ebay_api` and `call_ebay_api`
-- use descriptive discovery prompts when searching for an API
-- proceed immediately with the most suitable approach
+Accepts the user's original request as `user_input` and returns guidance that helps the MCP client decide when to use `query_ebay_graphql`, when to use `call_ebay_graphql`, and how to approach schema discovery.
 
-This prompt is registered under the name `interpret_user_request` in the MCP server and is intended for MCP clients that support prompt discovery and execution.
+Typical use cases:
 
-### How to Use This Prompt
+- Convert abstract requests into specific eBay GraphQL operations
+- Decide whether to explore the schema first or execute a known query directly
+- Improve the natural-language prompt sent to `query_ebay_graphql`
 
-| Agent | How to invoke |
-|------|---------------|
-| Claude Code | Slash command: `/mcp__ebay-api__interpret_user_request` |
-| GitHub Copilot | Slash command: `/mcp.ebay-api.interpret_user_request` |
+### How to Use These Prompts
 
-Prompt support depends on the MCP client integration. If prompts are not exposed, use `query_ebay_api` and `call_ebay_api` directly.
+| Prompt | Claude Code | GitHub Copilot |
+|--------|-------------|----------------|
+| REST | `/ebay-api:interpret_user_request` | `/mcp.ebay-api.interpret_user_request` |
+| GraphQL | `/ebay-api:interpret_graphql_request` | `/mcp.ebay-api.interpret_graphql_request` |
+
+Prompt support depends on the MCP client integration. If prompts are not exposed, use the tools directly.
+
+## Usage Examples
+
+Once connected, ask your AI assistant in natural language:
+
+**Note**: You don't need to specify whether you want REST or GraphQL — the MCP explores both and automatically picks the most appropriate API.
+
+- **"Find eBay APIs for listing products"** — searches both REST and GraphQL APIs
+- **"What scope permissions do I need to access my watch list?"** — looks up required OAuth scopes
+- **"What information can I query using userSavedSearches?"** — explores the GraphQL schema
+- **"Retrieve order details for IDs ORD-001 and ORD-002"** — executes a real API call
 
 ## OAuth Authentication Modes
 
@@ -273,18 +305,16 @@ Both modes handle token refresh automatically. For the OAuth flows behind each m
 - **Fix (alternative):** Launch your IDE from the terminal so it inherits the shell environment. VS Code and Cursor support this natively after a one-time CLI install from the Command Palette.
 
 **API Call Failed:**
-- This release only supports production environment
-- Production only supports GET requests for REST APIs (read operations)
-- Check your eBay account has proper API access
+- Verify that you are using the production environment
+- Use only REST GET requests or GraphQL Query operations; write operations are not supported
+- Check your eBay account has the required API access
 
-## Release Notes (v1.1.0)
+## Release Notes (v1.2.0)
 
 If you previously used an earlier version of this MCP server, here is what has been added in this release:
 
-- **Automatic Token Management** – Tokens were previously managed manually; the server now handles refresh automatically
-- **Simplified Setup** – Previously required pre-generated OAuth tokens; now only Client ID and Client Secret are needed (the server handles token generation)
-- **Dual Token Mode** – Application and User token modes are now configurable via environment variables
-- **MCP Prompt Support** – Prompts are now supported for REST APIs
+- **GraphQL API Support** – Adds schema discovery and query execution alongside existing REST API support
+- **GraphQL MCP Prompt** – Adds `interpret_graphql_request` alongside the existing REST API prompt
 
 ## Resources
 
