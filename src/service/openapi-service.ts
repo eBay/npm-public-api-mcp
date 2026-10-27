@@ -20,7 +20,9 @@ Searches eBay REST/OpenAPI APIs for endpoints, docs, parameters, schemas, and au
 Use for REST/OpenAPI requests or when you need details about an eBay REST endpoint.
 
 Routing:
-- Use this tool for REST/OpenAPI requests.
+- REST/OpenAPI specified: use this tool only.
+- GraphQL specified: use the GraphQL tool instead.
+- API type unspecified: call this tool and query_ebay_graphql tool in parallel, then compare.
 
 Input:
 - Natural-language query.
