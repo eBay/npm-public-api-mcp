@@ -5,12 +5,13 @@
 import SwaggerParser from "@apidevtools/swagger-parser";
 import { type OpenAPIV3 } from "openapi-types";
 import * as fs from "fs";
-import axios from "axios";
+import axios, { type AxiosResponse } from "axios";
 import * as yaml from "js-yaml";
 import util from "util";
 import { z, type ZodTypeAny } from "zod";
 import { buildHeadersFromInput, makeRequestWithTokenRefresh } from "../helper/http-helper.js";
 import { logger } from "../helper/logger.js";
+import { RECALL_SPEC_BY_PROMPT_URL } from "../constant/constants.js";
 
 
 
@@ -62,14 +63,92 @@ export function readSchema2Map(obj: unknown): unknown {
 /**
  * Query api spec and parse to OpenAPI document (supports both JSON and YAML)
  */
-export async function queryAndParseOpenApiDoc(specTitle: string, operationId : string, specUrl: string): Promise<OpenAPIV3.Document> {
-  const url = util.format(specUrl, specTitle, operationId);
+function parseDocString(docString: string): OpenAPIV3.Document | null {
+  try {
+    return JSON.parse(docString) as OpenAPIV3.Document;
+  } catch (jsonError) {
+    try {
+      return yaml.load(docString) as OpenAPIV3.Document;
+    } catch (yamlError) {
+      return null;
+    }
+  }
+}
+
+function docContainsOperation(doc: OpenAPIV3.Document, operationId: string): boolean {
+  if (!doc || !doc.paths) {
+    return false;
+  }
+  for (const pathItem of Object.values(doc.paths)) {
+    for (const method of ["get", "post", "put", "delete", "patch", "options", "head", "trace"] as const) {
+      const operation = pathItem && (pathItem as Record<string, { operationId?: string }>)[method];
+      if (operation && operation.operationId === operationId) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Fallback: resolve the OpenAPI document via the prompt-based spec search endpoint
+ * (RECALL_SPEC_BY_PROMPT_URL) when the field-based spec lookup endpoint
+ * (RECALL_SPEC_WITH_FIELD_URL) is unavailable (e.g. returns 404 for all inputs).
+ */
+async function queryAndParseOpenApiDocViaPromptSearch(specTitle: string, operationId: string): Promise<OpenAPIV3.Document | null> {
+  const url = util.format(RECALL_SPEC_BY_PROMPT_URL, encodeURIComponent(`${specTitle} ${operationId}`));
   const headers = await buildHeadersFromInput(undefined, false);
   const apiSpecRes = await makeRequestWithTokenRefresh({
     method: 'GET',
     url,
     headers,
   });
+  let items = apiSpecRes.data;
+  if (typeof items === "string") {
+    try {
+      items = JSON.parse(items);
+    } catch (jsonError) {
+      items = [items];
+    }
+  }
+  if (!Array.isArray(items)) {
+    items = [items];
+  }
+  let firstMatchingDoc: OpenAPIV3.Document | null = null;
+  for (const item of items) {
+    const doc = parseDocString(item as string);
+    if (!doc || !doc.paths || !docContainsOperation(doc, operationId)) {
+      continue;
+    }
+    if (firstMatchingDoc === null) {
+      firstMatchingDoc = doc;
+    }
+    if (doc.info && doc.info.title && specTitle &&
+        doc.info.title.toLowerCase() === specTitle.toLowerCase()) {
+      return doc;
+    }
+  }
+  return firstMatchingDoc;
+}
+
+export async function queryAndParseOpenApiDoc(specTitle: string, operationId : string, specUrl: string): Promise<OpenAPIV3.Document> {
+  const url = util.format(specUrl, specTitle, operationId);
+  const headers = await buildHeadersFromInput(undefined, false);
+  let apiSpecRes: AxiosResponse;
+  try {
+    apiSpecRes = await makeRequestWithTokenRefresh({
+      method: 'GET',
+      url,
+      headers,
+    });
+  } catch (specError) {
+    logger.error(`spec lookup failed for specTitle=[${specTitle}] operationId=[${operationId}], trying prompt search fallback`);
+    const doc = await queryAndParseOpenApiDocViaPromptSearch(specTitle, operationId);
+    if (doc) {
+      return doc;
+    }
+    throw specError;
+  }
   const docString = apiSpecRes.data;
   try {
     // Try parsing as JSON first
